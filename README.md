@@ -83,6 +83,90 @@ Qdrant 连接成功
 collection [question] 就绪
 服务启动: http://0.0.0.0:3000
 ```
+## 5.1 交叉编译（Windows → Linux）
+
+项目依赖 `fastembed`（内嵌 ONNX Runtime），有原生 C/C++ 依赖，直接在 Windows 上交叉编译到 Linux 比较困难。推荐使用 `cross` 工具 + Docker 部署。
+
+### 5.1.1 使用 cross 编译
+
+```powershell
+# 安装 cross
+cargo install cross
+
+# 编译（使用预配置的 Cross.toml）
+cross build --release --target x86_64-unknown-linux-gnu
+
+# 二进制在 target/x86_64-unknown-linux-gnu/release/qdrant-demo
+```
+
+### 5.1.2 Docker 部署
+
+将编译好的二进制和模型文件部署到 Linux 服务器，用 Docker 运行。
+
+**坑 1：glibc 兼容性**
+
+cross 默认使用较新的 glibc（约 2.38），而 CentOS 7 只有 glibc 2.17。Docker 基础镜像必须选 `ubuntu:24.04`，原因是：
+
+| 镜像 | glibc 版本 | 兼容？ |
+|------|-----------|--------|
+| CentOS 7 | 2.17 | ❌ |
+| ubuntu:22.04 | 2.35 | ❌ |
+| ubuntu:24.04 | 2.39 | ✅ |
+| alpine | musl | ❌ ONNX 不支持 |
+
+**坑 2：fastembed 模型缓存路径**
+
+fastembed 默认使用**相对路径** `.fastembed_cache`（不是 HuggingFace 标准的 `~/.cache/huggingface`）。
+
+```
+# fastembed 默认 DEFAULT_CACHE_DIR = ".fastembed_cache"
+```
+
+容器内工作目录是 `/app`，所以实际缓存路径是 `/app/.fastembed_cache/`，挂载时要注意。
+
+**坑 3：缓存目录命名**
+
+fastembed 使用的模型 ID 是 `Xenova/bge-small-zh-v1.5`，缓存目录名是 `models--Xenova--bge-small-zh-v1.5`（注意是 `Xenova` 前缀，不是 `BAAI`）。
+
+如果本地运行过 fastembed，缓存一般在 `~/.cache/fastembed/models--Xenova--bge-small-zh-v1.5/`。
+
+**完整部署步骤：**
+
+```bash
+# 1. 上传文件到服务器 /www/rust-vector/
+#    - qdrant-demo（二进制）
+#    - models/chinese-clip/onnx/model_quantized.onnx
+#    - .fastembed_cache/（BGE 模型缓存）
+
+# 2. 构建镜像
+docker build -t qdrant-demo:latest /www/rust-vector/
+
+# 3. 启动（注意缓存挂载到 /app/.fastembed_cache）
+docker run -d --name qdrant-demo \
+  --network host \
+  -v /www/rust-vector/.fastembed_cache:/app/.fastembed_cache \
+  -e QDRANT_API_KEY=<your-key> \
+  qdrant-demo:latest
+```
+
+Dockerfile 参考：
+
+```dockerfile
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY qdrant-demo .
+COPY ./models/chinese-clip ./models/chinese-clip/
+
+ENV HF_ENDPOINT=https://hf-mirror.com
+
+EXPOSE 3000
+CMD ["./qdrant-demo"]
+```
 
 ### 6. 验证
 
