@@ -6,9 +6,12 @@
 .env
 !.env.example
 
-# 模型缓存（首次启动会自动下载）
-models/chinese-clip/.cache
+# 模型文件（Chinese-CLIP 392MB，需单独下载）
+models/chinese-clip/
 .fastembed_cache/
+
+# protoc 编译工具（cargo build 时自行下载）
+protoc/
 
 # IDE
 .vscode
