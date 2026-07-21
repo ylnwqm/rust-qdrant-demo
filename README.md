@@ -1,4 +1,4 @@
-# wantong-vector — 题目向量检索引擎
+# qdrant-vector — 题目向量检索引擎
 
 基于 Rust Axum + Qdrant + BGE-small-zh + Chinese-CLIP 的多模态题目向量检索引擎。纯 Rust 单进程，支持文本、图片、图文混合三种搜索模式。
 
@@ -73,7 +73,7 @@ HF_ENDPOINT=https://hf-mirror.com
 cargo build --release
 
 # 启动
-./target/release/wantong-vector
+./target/release/qdrant-vector
 ```
 
 成功启动日志：
