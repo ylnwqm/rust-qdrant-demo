@@ -38,7 +38,6 @@ impl QuestionInput {
     pub fn validate(&self) -> Result<(), String> {
         if self.id == 0 { return Err("题目 id 不能为 0".into()); }
         if self.stem.trim().is_empty() { return Err(format!("题目[{}] stem 不能为空", self.id)); }
-        if self.analysis.trim().is_empty() { return Err(format!("题目[{}] analysis 不能为空", self.id)); }
         Ok(())
     }
 }
