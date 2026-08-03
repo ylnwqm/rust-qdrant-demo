@@ -116,35 +116,47 @@ impl QdrantService {
         Ok(())
     }
 
-    /** RRF 融合搜索：stem/analysis/knowledge 文本向量 + 可选 image 图像向量 */
+    /** 搜索：纯文本查 stem 向量，图文混合用 RRF 融合 */
     pub async fn search_with_image(
-        &self, stem_vec: Vec<f32>, analysis_vec: Vec<f32>, knowledge_vec: Vec<f32>,
-        image_vec: Option<Vec<f32>>, top_k: u64, score_threshold: f32,
-        _weights: [f32; 3], filters: Option<&SearchFilters>,
+        &self, stem_vec: Vec<f32>, image_vec: Option<Vec<f32>>,
+        top_k: u64, score_threshold: f32, _weights: [f32; 3],
+        filters: Option<&SearchFilters>,
     ) -> anyhow::Result<Vec<SearchResult>> {
         let filter = build_filter(filters);
-        let mut prefetch = vec![
-            prefetch_for("stem", stem_vec, filter.clone(), top_k + 20, score_threshold),
-            prefetch_for("analysis", analysis_vec, filter.clone(), top_k + 20, score_threshold),
-            prefetch_for("knowledge", knowledge_vec, filter, top_k + 20, score_threshold),
-        ];
 
-        if let Some(img_vec) = image_vec {
-            prefetch.push(prefetch_for("image", img_vec, None, top_k + 20, score_threshold));
-        }
+        let points_result = if image_vec.is_some() {
+            let img_vec = image_vec.unwrap();
+            // 图文混合：RRF 融合 stem + image 两路
+            let prefetch = vec![
+                prefetch_for("stem", stem_vec, filter.clone(), top_k + 20, score_threshold),
+                prefetch_for("image", img_vec, filter, top_k + 20, score_threshold),
+            ];
+            self.client.query(qdrant::QueryPoints {
+                collection_name: COLLECTION_NAME.into(),
+                prefetch,
+                query: Some(Query { variant: Some(qdrant::query::Variant::Fusion(qdrant::Fusion::Rrf as i32)) }),
+                with_payload: Some(qdrant::WithPayloadSelector {
+                    selector_options: Some(SelectorOptions::Enable(true)),
+                }),
+                limit: Some(top_k), score_threshold: Some(score_threshold),
+                ..Default::default()
+            }).await.context("search 失败")?.result
+        } else {
+            // 纯文本：直接查 stem 向量，用余弦相似度排序
+            self.client.query(qdrant::QueryPoints {
+                collection_name: COLLECTION_NAME.into(),
+                query: Some(Query::new_nearest(stem_vec)),
+                using: Some("stem".into()),
+                filter,
+                with_payload: Some(qdrant::WithPayloadSelector {
+                    selector_options: Some(SelectorOptions::Enable(true)),
+                }),
+                limit: Some(top_k), score_threshold: Some(score_threshold),
+                ..Default::default()
+            }).await.context("search 失败")?.result
+        };
 
-        let query = Query { variant: Some(qdrant::query::Variant::Fusion(qdrant::Fusion::Rrf as i32)) };
-        let points_result = self.client.query(qdrant::QueryPoints {
-            collection_name: COLLECTION_NAME.into(),
-            prefetch, query: Some(query),
-            with_payload: Some(qdrant::WithPayloadSelector {
-                selector_options: Some(SelectorOptions::Enable(true)),
-            }),
-            limit: Some(top_k), score_threshold: Some(score_threshold),
-            ..Default::default()
-        }).await.context("search 失败")?;
-
-        Ok(build_results(points_result.result))
+        Ok(build_results(points_result))
     }
 }
 

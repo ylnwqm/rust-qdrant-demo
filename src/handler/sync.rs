@@ -105,14 +105,12 @@ pub async fn search(
         tracing::info!("搜索: text=(无), has_image={}", has_img);
     }
 
-    let (stem_vec, analysis_vec, knowledge_vec) = if has_text {
+    let stem_vec = if has_text {
         let text = req.query_text.unwrap();
         let embs = state.embedding.embed_text(vec![text])?;
-        let sv = embs.into_iter().next().unwrap_or_else(|| vec![0.0; state.embedding.text_dim()]);
-        (sv.clone(), sv.clone(), sv)
+        embs.into_iter().next().unwrap_or_else(|| vec![0.0; state.embedding.text_dim()])
     } else {
-        let ev = vec![0.0; state.embedding.text_dim()];
-        (ev.clone(), ev.clone(), ev)
+        vec![0.0; state.embedding.text_dim()]
     };
 
     let img_vec = if has_img {
@@ -130,7 +128,7 @@ pub async fn search(
     let w = [weights[0], weights[1], weights[2]];
 
     let results = state.qdrant.search_with_image(
-        stem_vec, analysis_vec, knowledge_vec, img_vec,
+        stem_vec, img_vec,
         req.top_k, req.score_threshold, w, req.filters.as_ref(),
     ).await?;
     let total = results.len();
