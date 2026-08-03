@@ -22,7 +22,10 @@ reqwest = { version = "0.12", features = ["json"] }
 image = "0.25"
 ndarray = "0.16"
 ort = "=2.0.0-rc.5"
-openssl = { version = "0.10", features = ["vendored"] }
+
+# 本地开发（Windows）时注释此行；交叉编译 Linux 时取消注释
+# openssl = { version = "0.10", features = ["vendored"] }
+
 [profile.dev]
 opt-level = 0
 debug = false

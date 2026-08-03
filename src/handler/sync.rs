@@ -92,8 +92,18 @@ pub async fn search(
         return Err(AppError::BadRequest("top_k 必须在 1-100 之间".into()));
     }
 
-    tracing::info!("搜索: text={}, has_image={}",
-        if has_text { &req.query_text.as_ref().unwrap()[..req.query_text.as_ref().unwrap().len().min(50)] } else { "(无)" }, has_img);
+    if has_text {
+        let text = req.query_text.as_ref().unwrap();
+        let preview = if text.len() > 200 {
+            let safe_end = text.floor_char_boundary(200);
+            format!("{}...({}字节)", &text[..safe_end], text.len())
+        } else {
+            text.clone()
+        };
+        tracing::info!("搜索: text={}, has_image={}", preview, has_img);
+    } else {
+        tracing::info!("搜索: text=(无), has_image={}", has_img);
+    }
 
     let (stem_vec, analysis_vec, knowledge_vec) = if has_text {
         let text = req.query_text.unwrap();
